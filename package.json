@@ -1,0 +1,20 @@
+{
+  "name": "linkedin-trigger-agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npx trigger.dev@4.5.4 dev",
+    "deploy": "npx trigger.dev@4.5.4 deploy"
+  },
+  "dependencies": {
+    "@trigger.dev/sdk": "4.5.4",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.211",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/node": "^22.9.0",
+    "trigger.dev": "4.5.4"
+  }
+}
