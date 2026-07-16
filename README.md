@@ -32,7 +32,6 @@ environment) and watch the logs stream in this terminal.
 
 ## Deploying
 
-Connect this repo in the Trigger.dev dashboard (Project → Settings → Connect GitHub) so every
-push to `master` auto-deploys. Add the same three env vars to the dashboard under Environment
-Variables (both Staging and Prod) before the first deploy — they only exist in `.env` locally
-otherwise.
+This repo is connected in the Trigger.dev dashboard (Project → Settings → Connect GitHub), so
+every push to `master` auto-deploys to production. Env vars live in the dashboard under
+Environment Variables (Prod) — they only exist in `.env` locally otherwise.
