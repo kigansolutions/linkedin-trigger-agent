@@ -100,6 +100,12 @@ export const draftPost = task({
         systemPrompt: SYSTEM_PROMPT,
         tools: ["WebSearch"],
         maxTurns: 12,
+        // Windows dev environments don't ship the SDK's bundled native CLI binary as an
+        // optional dependency the way Linux does — point at the local Claude Code install instead.
+        // Not needed on the Linux deploy target, so this is a no-op there.
+        ...(process.env.CLAUDE_CODE_EXECUTABLE_PATH
+          ? { pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE_PATH }
+          : {}),
       },
     })) {
       if (message.type === "result" && message.subtype === "success") {
