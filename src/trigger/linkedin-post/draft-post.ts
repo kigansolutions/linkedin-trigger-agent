@@ -36,7 +36,8 @@ type SourcePost = {
 async function fetchRedditPosts(): Promise<SourcePost[]> {
   const apiKey = process.env.COMPOSIO_API_KEY;
   const connectedAccountId = process.env.COMPOSIO_REDDIT_CONNECTED_ACCOUNT_ID;
-  if (!apiKey || !connectedAccountId) {
+  const userId = process.env.COMPOSIO_REDDIT_USER_ID;
+  if (!apiKey || !connectedAccountId || !userId) {
     console.log("[draft-post] Composio Reddit not configured, skipping");
     return [];
   }
@@ -49,11 +50,15 @@ async function fetchRedditPosts(): Promise<SourcePost[]> {
         headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
           connected_account_id: connectedAccountId,
+          // Composio requires the connected account's own user_id alongside
+          // connected_account_id, or execution fails with a 400
+          // (ActionExecute_ConnectedAccountEntityIdRequired).
+          user_id: userId,
           arguments: { subreddit, size: 5 },
         }),
       });
       if (!res.ok) {
-        console.log(`[draft-post] Reddit fetch failed for r/${subreddit}: ${res.status}`);
+        console.log(`[draft-post] Reddit fetch failed for r/${subreddit}: ${res.status} ${await res.text()}`);
         continue;
       }
       const body = (await res.json()) as { successful?: boolean; error?: string; data?: { posts_list?: any[] } };
