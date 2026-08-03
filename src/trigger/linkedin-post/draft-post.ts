@@ -13,6 +13,115 @@ const SUBREDDITS = [
   "technology", "vibecoding",
 ];
 
+const TAVILY_FALLBACK_QUERIES = [
+  "AI agent production failure reddit discussion",
+  "MCP server security reddit",
+  "local LLM ollama business use reddit",
+  "AI automation client reddit complaint",
+];
+
+type SourcePost = {
+  subreddit: string;
+  title: string;
+  url: string;
+  score: number;
+  numComments: number;
+  excerpt: string;
+};
+
+// Reddit's own OAuth API works fine for authenticated calls — it's only anonymous/
+// unauthenticated scraping (bare JSON/RSS fetches, most search-engine crawlers) that
+// gets blocked. Composio holds the OAuth connection, so this goes through Reddit's
+// real API rather than working around a block that only applies to unauthenticated access.
+async function fetchRedditPosts(): Promise<SourcePost[]> {
+  const apiKey = process.env.COMPOSIO_API_KEY;
+  const connectedAccountId = process.env.COMPOSIO_REDDIT_CONNECTED_ACCOUNT_ID;
+  if (!apiKey || !connectedAccountId) {
+    console.log("[draft-post] Composio Reddit not configured, skipping");
+    return [];
+  }
+
+  const posts: SourcePost[] = [];
+  for (const subreddit of SUBREDDITS) {
+    try {
+      const res = await fetch(`https://backend.composio.dev/api/v3/tools/execute/REDDIT_RETRIEVE_REDDIT_POST`, {
+        method: "POST",
+        headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connected_account_id: connectedAccountId,
+          arguments: { subreddit, size: 5 },
+        }),
+      });
+      if (!res.ok) {
+        console.log(`[draft-post] Reddit fetch failed for r/${subreddit}: ${res.status}`);
+        continue;
+      }
+      const body = (await res.json()) as { successful?: boolean; error?: string; data?: { posts_list?: any[] } };
+      if (!body.successful) {
+        console.log(`[draft-post] Reddit fetch unsuccessful for r/${subreddit}: ${body.error}`);
+        continue;
+      }
+      for (const p of body.data?.posts_list ?? []) {
+        posts.push({
+          subreddit,
+          title: p.title,
+          url: `https://reddit.com${p.permalink}`,
+          score: p.score ?? p.ups ?? 0,
+          numComments: p.num_comments ?? 0,
+          excerpt: (p.selftext ?? "").slice(0, 400),
+        });
+      }
+    } catch (err) {
+      console.log(`[draft-post] Reddit fetch error for r/${subreddit}: ${err}`);
+    }
+  }
+  console.log(`[draft-post] Composio Reddit returned ${posts.length} posts across ${SUBREDDITS.length} subreddits`);
+  return posts;
+}
+
+async function fetchTavilyFallback(): Promise<SourcePost[]> {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey) {
+    console.log("[draft-post] Tavily not configured, skipping fallback");
+    return [];
+  }
+
+  const posts: SourcePost[] = [];
+  for (const query of TAVILY_FALLBACK_QUERIES) {
+    try {
+      const res = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          search_depth: "basic",
+          max_results: 5,
+          include_domains: ["reddit.com"],
+        }),
+      });
+      if (!res.ok) {
+        console.log(`[draft-post] Tavily fetch failed for "${query}": ${res.status}`);
+        continue;
+      }
+      const body = (await res.json()) as { results?: { title: string; url: string; content: string }[] };
+      for (const r of body.results ?? []) {
+        posts.push({ subreddit: "?", title: r.title, url: r.url, score: 0, numComments: 0, excerpt: r.content.slice(0, 400) });
+      }
+    } catch (err) {
+      console.log(`[draft-post] Tavily fetch error for "${query}": ${err}`);
+    }
+  }
+  console.log(`[draft-post] Tavily fallback returned ${posts.length} results`);
+  return posts;
+}
+
+function formatSourceContext(posts: SourcePost[]): string {
+  if (!posts.length) return "(no live source material found this run)";
+  return posts
+    .map((p) => `- r/${p.subreddit} — "${p.title}" (score ${p.score}, ${p.numComments} comments)\n  ${p.url}\n  ${p.excerpt || "(no body text)"}`)
+    .join("\n\n");
+}
+
 const SYSTEM_PROMPT = `You draft a single LinkedIn post for Cameron Weyers, in his voice.
 
 Who Cameron is: a business operator (financial accounting / business ownership, prior
@@ -31,22 +140,19 @@ What he's shipped (draw on these for authority/examples, don't just list them):
 - A SARS-compliant payroll platform (Django, WhatsApp payslip delivery, ~7,100 LOC).
 - A hospitality point-of-sale platform (~3,600 LOC, 46 models).
 
-Step 1 — research. Reddit blocks direct programmatic fetches (JSON/RSS), so use your web search
-tool instead: run a handful of targeted searches like \`site:reddit.com/r/AI_Agents <theme>\` across
-a mix of these subreddits — ${SUBREDDITS.join(", ")} — favoring the AI-native ones. You don't need
-to search all of them; stop once you've found a live discussion worth reacting to. If nothing
-useful turns up, draft from Cameron's shipped work directly instead (source: "operator experience").
+Step 1 — pick ONE topic from the real Reddit posts you're given below. Favor the AI-native
+subreddits and posts with real engagement (score/comments) over noise. Never repeat a topic or
+angle from the "already used" list you're given. If nothing in the batch intersects something
+Cameron has real authority to speak to, draft from Cameron's shipped work directly instead
+(source: "operator experience") — don't force a reach.
 
-Step 2 — pick ONE topic: the discussion that intersects something Cameron has real authority to
-speak to. Never repeat a topic or angle from the "already used" list you're given.
-
-Step 3 — draft, following all of these voice rules:
+Step 2 — draft, following all of these voice rules:
 - Punchy. Short lines, generous white space.
 - Contrarian-but-not-preachy. Opinionated, not hedged.
 - No emoji. 0-3 hashtags total.
 - End on a question that invites real replies, not engagement bait.
-- React to the source discussion from Cameron's actual operator experience — never summarize it
-  like a news digest.
+- React to the source post from Cameron's actual operator experience — never summarize it like a
+  news digest.
 - Job-seeking framing is fine occasionally, not mandatory, never desperate.
 
 Respond in EXACTLY this format, nothing before or after:
@@ -56,12 +162,12 @@ SOURCE: <the reddit URL you drew on, or "operator experience">
 POST:
 <the full post text, ready to publish as-is>`;
 
-function buildUserPrompt(payload: DraftPostPayload): string {
+function buildUserPrompt(payload: DraftPostPayload, sourceContext: string): string {
   const usedLines = payload.existingTopics.length
     ? payload.existingTopics.map((t) => `- ${t}`).join("\n")
     : "(none yet)";
 
-  return `Already used topics/angles — do not repeat:\n${usedLines}\n\nFind this week's topic and draft the post.`;
+  return `Already used topics/angles — do not repeat:\n${usedLines}\n\nReal Reddit posts from this week:\n${sourceContext}\n\nPick this week's topic and draft the post.`;
 }
 
 async function createClickUpTask(topic: string, source: string, post: string): Promise<string> {
@@ -93,17 +199,19 @@ export const draftPost = task({
     const token = process.env.CLAUDE_CODE_OAUTH_TOKEN;
     if (!token) throw new Error("CLAUDE_CODE_OAUTH_TOKEN is not set");
 
+    let sourcePosts = await fetchRedditPosts();
+    if (sourcePosts.length === 0) {
+      sourcePosts = await fetchTavilyFallback();
+    }
+    const sourceContext = formatSourceContext(sourcePosts);
+
     let reply = "";
     for await (const message of query({
-      prompt: buildUserPrompt(payload),
+      prompt: buildUserPrompt(payload, sourceContext),
       options: {
         systemPrompt: SYSTEM_PROMPT,
-        tools: ["WebSearch"],
-        // `tools` only controls availability — it doesn't skip the permission prompt.
-        // This runs headless with no one to approve it, so WebSearch needs to be
-        // pre-allowed or every call gets silently auto-denied.
-        allowedTools: ["WebSearch"],
-        maxTurns: 12,
+        tools: [],
+        maxTurns: 4,
         // Windows dev environments don't ship the SDK's bundled native CLI binary as an
         // optional dependency the way Linux does — point at the local Claude Code install instead.
         // Not needed on the Linux deploy target, so this is a no-op there.
@@ -112,23 +220,6 @@ export const draftPost = task({
           : {}),
       },
     })) {
-      if (message.type === "assistant") {
-        for (const block of message.message.content) {
-          if (block.type === "tool_use") {
-            console.log(`[draft-post] tool_use ${block.name}: ${JSON.stringify(block.input)}`);
-          } else if (block.type === "text") {
-            console.log(`[draft-post] assistant text: ${block.text.slice(0, 300)}`);
-          }
-        }
-      }
-      if (message.type === "user" && Array.isArray(message.message.content)) {
-        for (const block of message.message.content) {
-          if (block.type === "tool_result") {
-            const content = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
-            console.log(`[draft-post] tool_result: ${content.slice(0, 500)}`);
-          }
-        }
-      }
       if (message.type === "result" && message.subtype === "success") {
         reply = message.result;
       }
