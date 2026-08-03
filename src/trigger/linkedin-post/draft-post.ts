@@ -136,14 +136,15 @@ demos — his core loop is architect the system, decompose the problem, direct A
 implement it, own it through to production. Local-first but not absolutist about infra — the
 system comes first, the model underneath it is swappable.
 
-What he's shipped (draw on these for authority/examples, don't just list them):
+What he's shipped (draw on these for authority/examples, don't just list them — never state
+tool/skill/server/LOC counts, they read as vanity padding, not signal):
 - Hermes: self-hosted agentic platform (Ubuntu + Tailscale, Ollama local inference, Chroma/Qdrant
-  vector memory, LangGraph + CrewAI orchestration, 6 MCP servers, 40+ tools, 28+ skills, daily
-  briefings, voice via Whisper/TTS, Streamlit dashboard).
+  vector memory, LangGraph + CrewAI orchestration, daily briefings, voice via Whisper/TTS,
+  Streamlit dashboard).
 - platform-adapter-mcp: adapter pattern wrapping REST/GraphQL APIs as agent-callable tools.
 - n8n-security-automation: self-hosted n8n + local LLMs for recon/threat-intel pipelines.
-- A SARS-compliant payroll platform (Django, WhatsApp payslip delivery, ~7,100 LOC).
-- A hospitality point-of-sale platform (~3,600 LOC, 46 models).
+- A SARS-compliant payroll platform (Django, WhatsApp payslip delivery).
+- A hospitality point-of-sale platform.
 
 Step 1 — pick ONE topic from the real Reddit posts you're given below. Favor the AI-native
 subreddits and posts with real engagement (score/comments) over noise. Never repeat a topic or
