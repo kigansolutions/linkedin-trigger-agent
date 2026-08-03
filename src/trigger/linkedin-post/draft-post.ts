@@ -108,6 +108,23 @@ export const draftPost = task({
           : {}),
       },
     })) {
+      if (message.type === "assistant") {
+        for (const block of message.message.content) {
+          if (block.type === "tool_use") {
+            console.log(`[draft-post] tool_use ${block.name}: ${JSON.stringify(block.input)}`);
+          } else if (block.type === "text") {
+            console.log(`[draft-post] assistant text: ${block.text.slice(0, 300)}`);
+          }
+        }
+      }
+      if (message.type === "user" && Array.isArray(message.message.content)) {
+        for (const block of message.message.content) {
+          if (block.type === "tool_result") {
+            const content = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+            console.log(`[draft-post] tool_result: ${content.slice(0, 500)}`);
+          }
+        }
+      }
       if (message.type === "result" && message.subtype === "success") {
         reply = message.result;
       }
