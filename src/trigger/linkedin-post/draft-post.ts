@@ -99,6 +99,10 @@ export const draftPost = task({
       options: {
         systemPrompt: SYSTEM_PROMPT,
         tools: ["WebSearch"],
+        // `tools` only controls availability — it doesn't skip the permission prompt.
+        // This runs headless with no one to approve it, so WebSearch needs to be
+        // pre-allowed or every call gets silently auto-denied.
+        allowedTools: ["WebSearch"],
         maxTurns: 12,
         // Windows dev environments don't ship the SDK's bundled native CLI binary as an
         // optional dependency the way Linux does — point at the local Claude Code install instead.
