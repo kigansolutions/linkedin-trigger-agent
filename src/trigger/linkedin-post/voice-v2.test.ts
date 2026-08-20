@@ -174,6 +174,8 @@ Generic advice.`)
     const safePhrases = [
       "This workflow is not yet in production.",
       "This is not for clients until there is evidence.",
+      "The workflow is not fully automated.",
+      "We aren't fully automated because approval should stay human.",
       "Autonomy is earned after review gates and stop paths are proven.",
       "I scaled back the workflow because the approval step was still messy.",
       "The system does not replace staff; it keeps the handoff visible.",
@@ -193,7 +195,8 @@ Generic advice.`)
       "We guarantee results.",
       "The workflow saved 40% and increased revenue.",
       "This is POPIA compliant at scale.",
-      "The agent replaces staff in every build.",
+      "The agent replaces staff.",
+      "The workflow is replacing employees.",
       "AI is revolutionising how businesses operate.",
     ];
 

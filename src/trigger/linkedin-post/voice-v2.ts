@@ -154,7 +154,7 @@ export const RISK_FINDINGS: RiskFinding[] = [
   { label: "scale claim", pattern: /\bat scale\b|\bscaled\b|\benterprise-grade\b/i },
   { label: "every build claim", pattern: /\bevery build\b/i },
   { label: "case-study phrasing", pattern: /\bcase study\b|\bclient outcome\b|\bhelped (?:a|an|our) client\b/i },
-  { label: "staff replacement implication", pattern: /\breplace (?:staff|employees|your team|people|humans)\b/i },
+  { label: "staff replacement implication", pattern: /\breplac(?:e|es|ed|ing)\s+(?:staff|employees|your team|the team|people|humans)\b/i },
   { label: "generic AI revolution language", pattern: /\bAI is revolutioni[sz]ing\b|\btransforming the way businesses\b/i },
 ];
 
@@ -359,8 +359,9 @@ function getSafeDisclaimerSpans(text: string): { start: number; end: number }[] 
   const patterns = [
     /\bnot yet in production\b/gi,
     /\bnot for clients\b/gi,
+    /\b(?:not|isn't|aren't)\s+(?:fully\s+)?automated\b/gi,
     /\bno evidence of ROI yet\b/gi,
-    /\b(?:does not|doesn't|do not|don't|will not|won't|should not|shouldn't)\s+replace\s+(?:staff|employees|your team|people|humans)\b/gi,
+    /\b(?:does not|doesn't|do not|don't|will not|won't|should not|shouldn't)\s+replac(?:e|es|ed|ing)\s+(?:staff|employees|your team|the team|people|humans)\b/gi,
     /\bautonomy is earned\b/gi,
     /\bscaled back\b/gi,
   ];
