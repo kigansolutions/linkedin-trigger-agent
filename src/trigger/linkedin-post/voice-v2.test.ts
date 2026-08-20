@@ -179,6 +179,9 @@ Generic advice.`)
       "Autonomy is earned after review gates and stop paths are proven.",
       "I scaled back the workflow because the approval step was still messy.",
       "The system does not replace staff; it keeps the handoff visible.",
+      "The workflow isn't replacing employees.",
+      "We are not replacing people.",
+      "The system is not replacing the team.",
       "There is no evidence of ROI yet, so I would not claim it.",
     ];
 
@@ -197,6 +200,9 @@ Generic advice.`)
       "This is POPIA compliant at scale.",
       "The agent replaces staff.",
       "The workflow is replacing employees.",
+      "The system replaced people.",
+      "This will replace humans.",
+      "The agent replaces the team.",
       "AI is revolutionising how businesses operate.",
     ];
 

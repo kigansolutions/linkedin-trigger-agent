@@ -361,7 +361,7 @@ function getSafeDisclaimerSpans(text: string): { start: number; end: number }[] 
     /\bnot for clients\b/gi,
     /\b(?:not|isn't|aren't)\s+(?:fully\s+)?automated\b/gi,
     /\bno evidence of ROI yet\b/gi,
-    /\b(?:does not|doesn't|do not|don't|will not|won't|should not|shouldn't)\s+replac(?:e|es|ed|ing)\s+(?:staff|employees|your team|the team|people|humans)\b/gi,
+    /\b(?:does not|doesn't|do not|don't|is not|isn't|are not|aren't|will not|won't|should not|shouldn't)\s+replac(?:e|es|ed|ing)\s+(?:staff|employees|your team|the team|people|humans)\b/gi,
     /\bautonomy is earned\b/gi,
     /\bscaled back\b/gi,
   ];
