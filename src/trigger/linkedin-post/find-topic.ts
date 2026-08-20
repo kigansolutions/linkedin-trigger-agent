@@ -8,6 +8,11 @@ const SEED_USED_TOPICS = [
   "Agent tool-sprawl vs shipping one reliable job first",
   "The 'silent failure' problem in production multi-agent systems",
   "Auditing whether your agent's tools actually still work, not just whether they're connected",
+  "Reliability before tool-sprawl",
+  "Checkpoints before trust",
+  "Bounded autonomy before risky automation",
+  "Brand clarity before design",
+  "Process before automation",
 ];
 
 async function fetchExistingClickUpTitles(): Promise<string[]> {
