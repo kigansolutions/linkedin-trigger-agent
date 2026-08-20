@@ -1,13 +1,17 @@
 import { task } from "@trigger.dev/sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import {
+  angleTagFor,
+  angleTypeFromTag,
   buildClickUpDescription,
+  buildClickUpTaskName,
   buildSystemPrompt,
   buildUserPrompt,
   CONTENT_LANE_GUIDANCE,
   CONTENT_LANES,
   enforceDraftSafety,
   parseDraftOutput,
+  summarizeLaneCounts,
   type AngleType,
   type DraftOutput,
 } from "./voice-v2.js";
@@ -85,6 +89,13 @@ type SourcePost = {
   score: number;
   numComments: number;
   excerpt: string;
+};
+
+type ClickUpTaskSummary = {
+  name: string;
+  dateCreated: number;
+  tags: string[];
+  description: string;
 };
 
 // Reddit's own OAuth API works fine for authenticated calls — it's only anonymous/
@@ -195,6 +206,47 @@ function formatSourceContext(posts: SourcePost[]): string {
   return `Recurring Kigan/Cameron content lanes and safe seed angles:\n${lanes}\n\nOptional external inspiration:\n${externalSources}`;
 }
 
+async function fetchRecentLaneSummary(): Promise<string> {
+  const apiKey = process.env.CLICKUP_API_KEY;
+  const listId = process.env.CLICKUP_LIST_ID;
+  if (!apiKey || !listId) return "No recent lane history available.";
+
+  const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task?include_closed=true&subtasks=false`, {
+    headers: { Authorization: apiKey },
+  });
+  if (!res.ok) {
+    console.log(`[draft-post] ClickUp lane-history fetch failed: ${res.status}`);
+    return "No recent lane history available.";
+  }
+
+  const data = (await res.json()) as { tasks?: any[] };
+  const recentDrafts: ClickUpTaskSummary[] = (data.tasks ?? [])
+    .map((task) => ({
+      name: String(task.name ?? ""),
+      dateCreated: Number(task.date_created ?? 0),
+      tags: (task.tags ?? []).map((tag: any) => String(tag.name ?? tag)),
+      description: String(task.description ?? task.text_content ?? ""),
+    }))
+    .filter((task) => task.name.includes("LinkedIn Draft"))
+    .sort((a, b) => b.dateCreated - a.dateCreated)
+    .slice(0, 8);
+
+  const taggedAngles = recentDrafts.flatMap((task) => {
+    const tagAngles = task.tags.map(angleTypeFromTag).filter((lane): lane is AngleType => Boolean(lane));
+    const descriptionAngle = extractAngleFromDescription(task.description);
+    return [...new Set(descriptionAngle ? [...tagAngles, descriptionAngle] : tagAngles)];
+  });
+  const summary = summarizeLaneCounts(taggedAngles);
+  console.log(`[draft-post] Recent content-lane summary: ${summary.replace(/\n/g, " | ")}`);
+  return summary;
+}
+
+function extractAngleFromDescription(description: string): AngleType | undefined {
+  const match = description.match(/\*\*Angle type:\*\*\s*(.+)/i);
+  const value = match?.[1]?.trim();
+  return value && CONTENT_LANES.includes(value as AngleType) ? (value as AngleType) : undefined;
+}
+
 async function createClickUpTask(draft: DraftOutput): Promise<string> {
   const apiKey = process.env.CLICKUP_API_KEY;
   const listId = process.env.CLICKUP_LIST_ID;
@@ -202,13 +254,14 @@ async function createClickUpTask(draft: DraftOutput): Promise<string> {
   if (!listId) throw new Error("CLICKUP_LIST_ID is not set");
 
   const today = new Date().toISOString().slice(0, 10);
+  const tags = ["linkedin-draft", angleTagFor(draft.angleType)];
   const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task`, {
     method: "POST",
     headers: { Authorization: apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: `LinkedIn Draft — ${today} — ${draft.topic}`,
+      name: buildClickUpTaskName(today, draft),
       description: buildClickUpDescription(draft),
-      tags: ["linkedin-draft"],
+      tags,
     }),
   });
   if (!res.ok) {
@@ -229,10 +282,11 @@ export const draftPost = task({
       sourcePosts = await fetchTavilyFallback();
     }
     const sourceContext = formatSourceContext(sourcePosts);
+    const laneSummary = await fetchRecentLaneSummary();
 
     let reply = "";
     for await (const message of query({
-      prompt: buildUserPrompt(payload.existingTopics, sourceContext),
+      prompt: buildUserPrompt(payload.existingTopics, sourceContext, laneSummary),
       options: {
         systemPrompt: buildSystemPrompt(),
         tools: [],

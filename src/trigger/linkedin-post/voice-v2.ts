@@ -24,6 +24,13 @@ export type RiskFinding = {
   pattern: RegExp;
 };
 
+export type LaneCount = {
+  angleType: AngleType;
+  count: number;
+};
+
+export const ANGLE_TAG_PREFIX = "angle:";
+
 export const CAMERON_IDENTITY = [
   "Cameron Weyers is the founder/operator building Kigan Agentic AI Solutions.",
   "He is a business operator first: restaurant ownership and financial/accounting context shape how he thinks about constraints, handoffs, cash, judgment, and operational mess.",
@@ -160,10 +167,11 @@ export const VOICE_FINDINGS: RiskFinding[] = [
 ];
 
 const FIELD_PATTERN =
-  /^TOPIC:\s*(?<topic>.+?)\s*\nANGLE_TYPE:\s*(?<angleType>.+?)\s*\nSOURCE:\s*(?<source>.+?)\s*\nCLAIM_RISK:\s*(?<claimRisk>LOW|MEDIUM|HIGH)\s*\nREVIEW_NOTES:\s*(?<reviewNotes>[\s\S]*?)\nPOST:\s*(?<post>[\s\S]+)$/;
+  /^TOPIC:\s*(?<topic>.+?)\s*\nANGLE_TYPE:\s*(?<angleType>.+?)\s*\nSOURCE:\s*(?<source>.+?)\s*\nCLAIM_RISK:\s*(?<claimRisk>[A-Za-z]+)\s*\nREVIEW_NOTES:\s*(?<reviewNotes>[\s\S]*?)\nPOST:\s*(?<post>[\s\S]+)$/;
 
 export function detectRiskyClaims(text: string): string[] {
-  return RISK_FINDINGS.filter((finding) => finding.pattern.test(text)).map((finding) => finding.label);
+  const safeSpans = getSafeDisclaimerSpans(text);
+  return RISK_FINDINGS.filter((finding) => hasUnsafeMatch(text, finding.pattern, safeSpans)).map((finding) => finding.label);
 }
 
 export function detectVoiceViolations(text: string): string[] {
@@ -189,11 +197,16 @@ export function parseDraftOutput(reply: string): DraftOutput {
     throw new Error(`Unsupported ANGLE_TYPE "${angleType}"`);
   }
 
+  const claimRisk = match.groups.claimRisk.trim().toUpperCase();
+  if (!isClaimRisk(claimRisk)) {
+    throw new Error(`Unsupported CLAIM_RISK "${match.groups.claimRisk.trim()}"`);
+  }
+
   return {
     topic: match.groups.topic.trim(),
     angleType,
     source: match.groups.source.trim(),
-    claimRisk: match.groups.claimRisk.trim() as ClaimRisk,
+    claimRisk,
     reviewNotes: match.groups.reviewNotes.trim(),
     post: match.groups.post.trim(),
   };
@@ -263,9 +276,9 @@ POST:
 <the full post text, draft only>`;
 }
 
-export function buildUserPrompt(existingTopics: string[], sourceContext: string): string {
+export function buildUserPrompt(existingTopics: string[], sourceContext: string, laneSummary = "No recent lane history available."): string {
   const usedLines = existingTopics.length ? existingTopics.map((topic) => `- ${topic}`).join("\n") : "(none yet)";
-  return `Already used topics/angles — do not repeat:\n${usedLines}\n\nCandidate weekly angles and optional source material:\n${sourceContext}\n\nPick this week's angle and draft the post.`;
+  return `Already used topics/angles — do not repeat:\n${usedLines}\n\nRecent content-lane mix — use as anti-clustering guidance, not rigid rotation:\n${laneSummary}\n\nCandidate weekly angles and optional source material:\n${sourceContext}\n\nPick this week's angle and draft the post.`;
 }
 
 export function buildClickUpDescription(draft: DraftOutput): string {
@@ -286,6 +299,76 @@ ${draft.reviewNotes}
 ${draft.post}`;
 }
 
+export function buildClickUpTaskName(date: string, draft: DraftOutput): string {
+  const baseName = `LinkedIn Draft — ${date} — ${draft.topic}`;
+  return draft.claimRisk === "HIGH" ? `⚠️ HIGH RISK — ${baseName}` : baseName;
+}
+
+export function angleTagFor(angleType: AngleType): string {
+  return `${ANGLE_TAG_PREFIX}${angleType.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+}
+
+export function angleTypeFromTag(tag: string): AngleType | undefined {
+  const normalized = tag.trim().toLowerCase();
+  return CONTENT_LANES.find((lane) => angleTagFor(lane) === normalized);
+}
+
+export function summarizeLaneCounts(angleTypes: AngleType[]): string {
+  if (!angleTypes.length) return "No recent angle tags found.";
+
+  const counts = CONTENT_LANES.map((angleType) => ({
+    angleType,
+    count: angleTypes.filter((lane) => lane === angleType).length,
+  })).filter((entry) => entry.count > 0);
+
+  const total = angleTypes.length;
+  const busiest = counts.reduce<LaneCount | undefined>(
+    (current, entry) => (!current || entry.count > current.count ? entry : current),
+    undefined
+  );
+  const countLines = counts.map((entry) => `- ${entry.angleType}: ${entry.count}`).join("\n");
+  const guidance = busiest && busiest.count > 1
+    ? `Recent drafts lean toward "${busiest.angleType}". Prefer a different lane when the available angle is equally strong.`
+    : "Recent drafts are not strongly clustered. Choose the strongest credible angle.";
+
+  return `Last ${total} tagged draft${total === 1 ? "" : "s"}:\n${countLines}\n${guidance}`;
+}
+
 function isAngleType(value: string): value is AngleType {
   return (CONTENT_LANES as readonly string[]).includes(value);
+}
+
+function isClaimRisk(value: string): value is ClaimRisk {
+  return value === "LOW" || value === "MEDIUM" || value === "HIGH";
+}
+
+function hasUnsafeMatch(text: string, pattern: RegExp, safeSpans: { start: number; end: number }[]): boolean {
+  const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+  const matcher = new RegExp(pattern.source, flags);
+  for (const match of text.matchAll(matcher)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    if (!safeSpans.some((span) => start >= span.start && end <= span.end)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getSafeDisclaimerSpans(text: string): { start: number; end: number }[] {
+  const patterns = [
+    /\bnot yet in production\b/gi,
+    /\bnot for clients\b/gi,
+    /\bno evidence of ROI yet\b/gi,
+    /\b(?:does not|doesn't|do not|don't|will not|won't|should not|shouldn't)\s+replace\s+(?:staff|employees|your team|people|humans)\b/gi,
+    /\bautonomy is earned\b/gi,
+    /\bscaled back\b/gi,
+  ];
+
+  return patterns.flatMap((pattern) =>
+    [...text.matchAll(pattern)].map((match) => ({
+      start: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+    }))
+  );
 }

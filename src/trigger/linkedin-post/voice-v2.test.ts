@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   assessClaimRisk,
   buildClickUpDescription,
+  buildClickUpTaskName,
   buildSystemPrompt,
   buildUserPrompt,
   CONTENT_LANES,
   detectRiskyClaims,
   enforceDraftSafety,
   parseDraftOutput,
+  summarizeLaneCounts,
   type DraftOutput,
 } from "./voice-v2.js";
 
@@ -108,10 +110,16 @@ describe("LinkedIn Content Engine v2 voice", () => {
   });
 
   it("assembles fallback user context when no live source material is available", () => {
-    const prompt = buildUserPrompt(["Process before automation"], "(no live external source material found this run)");
+    const prompt = buildUserPrompt(
+      ["Process before automation"],
+      "(no live external source material found this run)",
+      "Last 3 tagged drafts:\n- Brand clarity: 3\nRecent drafts lean toward \"Brand clarity\"."
+    );
 
     expect(prompt).toContain("Already used topics/angles");
     expect(prompt).toContain("- Process before automation");
+    expect(prompt).toContain("anti-clustering guidance, not rigid rotation");
+    expect(prompt).toContain("Brand clarity: 3");
     expect(prompt).toContain("Pick this week's angle");
   });
 
@@ -119,7 +127,7 @@ describe("LinkedIn Content Engine v2 voice", () => {
     const parsed = parseDraftOutput(`TOPIC: Review gates before autonomy
 ANGLE_TYPE: Human-governed AI
 SOURCE: operator experience
-CLAIM_RISK: LOW
+CLAIM_RISK: Low
 REVIEW_NOTES: Fits governed AI; source is first-party operator judgment.
 POST:
 Review gates are where speed meets accountability.`);
@@ -127,6 +135,18 @@ Review gates are where speed meets accountability.`);
     expect(parsed.angleType).toBe("Human-governed AI");
     expect(parsed.claimRisk).toBe("LOW");
     expect(parsed.post).toContain("accountability");
+  });
+
+  it("rejects invalid claim risk values while tolerating valid casing", () => {
+    expect(() =>
+      parseDraftOutput(`TOPIC: Review gates
+ANGLE_TYPE: Human-governed AI
+SOURCE: operator experience
+CLAIM_RISK: uncertain
+REVIEW_NOTES: none
+POST:
+Draft.`)
+    ).toThrow(/Unsupported CLAIM_RISK/);
   });
 
   it("rejects unsupported angle types", () => {
@@ -150,6 +170,58 @@ Generic advice.`)
     expect(findings).toContain("case-study phrasing");
   });
 
+  it("keeps realistic safe disclaimers low risk", () => {
+    const safePhrases = [
+      "This workflow is not yet in production.",
+      "This is not for clients until there is evidence.",
+      "Autonomy is earned after review gates and stop paths are proven.",
+      "I scaled back the workflow because the approval step was still messy.",
+      "The system does not replace staff; it keeps the handoff visible.",
+      "There is no evidence of ROI yet, so I would not claim it.",
+    ];
+
+    for (const phrase of safePhrases) {
+      expect(detectRiskyClaims(phrase)).toEqual([]);
+      expect(assessClaimRisk(phrase)).toBe("LOW");
+    }
+  });
+
+  it("still flags realistic dangerous assertions", () => {
+    const dangerousClaims = [
+      "This workflow is in production for clients.",
+      "The system is fully automated and autonomous.",
+      "We guarantee results.",
+      "The workflow saved 40% and increased revenue.",
+      "This is POPIA compliant at scale.",
+      "The agent replaces staff in every build.",
+      "AI is revolutionising how businesses operate.",
+    ];
+
+    for (const claim of dangerousClaims) {
+      expect(assessClaimRisk(claim)).toBe("HIGH");
+    }
+  });
+
+  it("allows a full Human-governed AI post that uses autonomy safely", () => {
+    const post = `Autonomy is earned.
+
+Not announced.
+Not assumed.
+Not sold as a magic switch.
+
+I want the system to prove the boring parts first:
+the input is clear,
+the review point is visible,
+the stop path works,
+and a human still owns the decision.
+
+That is slower than the usual AI pitch.
+It is also closer to how a real business should adopt the work.`;
+
+    expect(detectRiskyClaims(post)).toEqual([]);
+    expect(assessClaimRisk(post)).toBe("LOW");
+  });
+
   it("marks risky drafts high risk before ClickUp creation", () => {
     const draft = enforceDraftSafety({
       ...SAMPLE_DRAFTS[0],
@@ -167,6 +239,28 @@ Generic advice.`)
     expect(description).toContain("**Angle type:** Human-governed AI");
     expect(description).toContain("**Claim risk:** LOW");
     expect(description).toContain("**Post body:**");
+  });
+
+  it("prefixes high-risk ClickUp titles only", () => {
+    expect(buildClickUpTaskName("2026-08-20", SAMPLE_DRAFTS[4])).toBe("LinkedIn Draft — 2026-08-20 — Review gates are not bureaucracy");
+
+    expect(buildClickUpTaskName("2026-08-20", { ...SAMPLE_DRAFTS[4], claimRisk: "HIGH" })).toBe(
+      "⚠️ HIGH RISK — LinkedIn Draft — 2026-08-20 — Review gates are not bureaucracy"
+    );
+  });
+
+  it("summarizes recent lane counts as anti-clustering guidance", () => {
+    const summary = summarizeLaneCounts([
+      "Brand clarity",
+      "Brand clarity",
+      "Workflow improvement",
+      "Human-governed AI",
+      "Brand clarity",
+    ]);
+
+    expect(summary).toContain("Last 5 tagged drafts");
+    expect(summary).toContain("- Brand clarity: 3");
+    expect(summary).toContain("Prefer a different lane");
   });
 
   it("keeps representative sample drafts within approved content lanes", () => {
