@@ -107,6 +107,10 @@ describe("LinkedIn Content Engine v2 voice", () => {
     expect(prompt).toContain("ANGLE_TYPE:");
     expect(prompt).toContain("CLAIM_RISK:");
     expect(prompt).toContain("REVIEW_NOTES:");
+    expect(prompt).toContain("Use South African/British English by default.");
+    expect(prompt).toContain('prefer "till" over "register"');
+    expect(prompt).toContain('Avoid "86\'d" in Cameron-authored prose');
+    expect(prompt).toContain("Preserve globally standard technical terms");
   });
 
   it("assembles fallback user context when no live source material is available", () => {

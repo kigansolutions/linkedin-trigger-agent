@@ -55,6 +55,7 @@ export const VOICE_PRINCIPLES = [
   "Technical depth appears as proof, not as the whole point.",
   "Plainspoken, practical, occasionally blunt or dry, never theatrical.",
   "Short lines and readable white space, without becoming a formula.",
+  "Use South African/British English by default. Prefer natural South African/British operating language over Americanisms, and avoid words that make Cameron sound American unless the source/context genuinely requires them.",
   "No fake client outcomes, no generic thought-leader voice, no engagement bait.",
 ];
 
@@ -133,12 +134,16 @@ export const PHRASING_EXAMPLES = {
     "I would rather prove one narrow workflow than claim an agent can run the business.",
     "Brand clarity is not the logo stage. It is the part where you stop asking design to fix a confused offer.",
     "The technical win only matters if it changes the operating decision.",
+    "The till is where a messy handoff becomes visible.",
+    "Front-of-house can spot a broken process before the dashboard does.",
   ],
   bad: [
     "AI is revolutionising every business function and founders need to adapt now.",
     "Hot take: fully autonomous agents will replace your back office this year.",
     "We helped clients save 40% with production AI workflows.",
     "Comment YES if you want the exact framework.",
+    "The register showed the workflow problem.",
+    "The stock was 86'd before the system noticed.",
   ],
 };
 
@@ -256,6 +261,16 @@ ${TECHNICAL_PROOF_RULES.map((line) => `- ${line}`).join("\n")}
 
 CTA / ENDING RULES
 ${CTA_RULES.map((line) => `- ${line}`).join("\n")}
+
+LOCALISATION RULES
+- Use South African/British English by default.
+- Prefer natural South African/British operating language over Americanisms.
+- Avoid words or phrasing that make Cameron sound American unless the American term is genuinely required by the source/context.
+- In ordinary restaurant context, prefer "till" over "register".
+- Avoid "86'd" in Cameron-authored prose unless quoting or source-specific.
+- Use metric/SI units rather than imperial where relevant.
+- "Front-of-house" is fine.
+- Preserve globally standard technical terms where there is no meaningful local alternative.
 
 GOOD PHRASING
 ${PHRASING_EXAMPLES.good.map((line) => `- ${line}`).join("\n")}
