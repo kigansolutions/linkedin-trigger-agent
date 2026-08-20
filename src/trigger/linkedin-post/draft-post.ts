@@ -1,23 +1,81 @@
 import { task } from "@trigger.dev/sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import {
+  buildClickUpDescription,
+  buildSystemPrompt,
+  buildUserPrompt,
+  CONTENT_LANE_GUIDANCE,
+  CONTENT_LANES,
+  enforceDraftSafety,
+  parseDraftOutput,
+  type AngleType,
+  type DraftOutput,
+} from "./voice-v2.js";
 
 type DraftPostPayload = {
   existingTopics: string[];
 };
 
 const SUBREDDITS = [
-  "AI_Agents", "ArtificialInteligence", "AskClaw", "automation", "bash",
-  "ChatGPT", "ChatGPTPromptGenius", "ClaudeAI", "ClaudeCode", "GeminiAI",
-  "GoogleAntigravityIDE", "GoogleGeminiAI", "hermesagent", "mcp", "netsec",
-  "notebooklm", "ollama", "OpenAI", "OSINT", "PromptEngineering", "startups",
-  "technology", "vibecoding",
+  "smallbusiness",
+  "Entrepreneur",
+  "startups",
+  "SaaS",
+  "consulting",
+  "marketing",
+  "branding",
+  "automation",
+  "nocode",
+  "business",
+  "productivity",
+  "ChatGPT",
+  "ClaudeAI",
+  "ArtificialInteligence",
+  "AI_Agents",
+  "mcp",
+  "n8n",
 ];
 
 const TAVILY_FALLBACK_QUERIES = [
-  "AI agent production failure reddit discussion",
-  "MCP server security reddit",
-  "local LLM ollama business use reddit",
-  "AI automation client reddit complaint",
+  "small business workflow automation reddit practical problems",
+  "AI adoption small business human review reddit",
+  "brand positioning unclear offer reddit founder",
+  "business process before automation reddit",
+  "AI agent oversight business workflow reddit",
+  "founder building in public AI automation lessons reddit",
+];
+
+const OPERATOR_ANGLE_SEEDS: { angleType: AngleType; topic: string; source: string }[] = [
+  {
+    angleType: "Founder/operator observations",
+    topic: "The handoff is usually where the system breaks",
+    source: "operator experience",
+  },
+  {
+    angleType: "Kigan-building-in-public",
+    topic: "Why Kigan is choosing narrow proof-led engagements before bigger claims",
+    source: "Kigan first-party evidence",
+  },
+  {
+    angleType: "Brand clarity",
+    topic: "Brand clarity starts before the logo when the offer is still fuzzy",
+    source: "Kigan first-party evidence",
+  },
+  {
+    angleType: "Workflow improvement",
+    topic: "Some workflows need a better process before they need AI",
+    source: "operator experience",
+  },
+  {
+    angleType: "Human-governed AI",
+    topic: "Review gates are not bureaucracy when AI is touching business decisions",
+    source: "Kigan first-party evidence",
+  },
+  {
+    angleType: "Technical proof",
+    topic: "Technical architecture only matters when it changes the operating decision",
+    source: "operator experience",
+  },
 ];
 
 type SourcePost = {
@@ -121,62 +179,23 @@ async function fetchTavilyFallback(): Promise<SourcePost[]> {
 }
 
 function formatSourceContext(posts: SourcePost[]): string {
-  if (!posts.length) return "(no live source material found this run)";
-  return posts
+  const lanes = CONTENT_LANES.map((lane) => {
+    const seeds = OPERATOR_ANGLE_SEEDS.filter((seed) => seed.angleType === lane)
+      .map((seed) => `  - ${seed.topic} (source: ${seed.source})`)
+      .join("\n");
+    return `- ${lane}: ${CONTENT_LANE_GUIDANCE[lane].join(" ")}\n${seeds}`;
+  }).join("\n\n");
+
+  const externalSources = posts.length
+    ? posts
     .map((p) => `- r/${p.subreddit} — "${p.title}" (score ${p.score}, ${p.numComments} comments)\n  ${p.url}\n  ${p.excerpt || "(no body text)"}`)
-    .join("\n\n");
+    .join("\n\n")
+    : "(no live external source material found this run)";
+
+  return `Recurring Kigan/Cameron content lanes and safe seed angles:\n${lanes}\n\nOptional external inspiration:\n${externalSources}`;
 }
 
-const SYSTEM_PROMPT = `You draft a single LinkedIn post for Cameron Weyers, in his voice.
-
-Who Cameron is: a business operator (financial accounting / business ownership, prior
-hospitality/kitchen background) turned AI systems builder. Based in the Western Cape, South
-Africa. Runs Kigan Solutions. Primary language Python (Django). Ships production systems, not
-demos — his core loop is architect the system, decompose the problem, direct AI tooling to
-implement it, own it through to production. Local-first but not absolutist about infra — the
-system comes first, the model underneath it is swappable.
-
-What he's shipped (draw on these for authority/examples, don't just list them — never state
-tool/skill/server/LOC counts, they read as vanity padding, not signal):
-- Hermes: self-hosted agentic platform (Ubuntu + Tailscale, Ollama local inference, Chroma/Qdrant
-  vector memory, LangGraph + CrewAI orchestration, daily briefings, voice via Whisper/TTS,
-  Streamlit dashboard).
-- platform-adapter-mcp: adapter pattern wrapping REST/GraphQL APIs as agent-callable tools.
-- n8n-security-automation: self-hosted n8n + local LLMs for recon/threat-intel pipelines.
-- A SARS-compliant payroll platform (Django, WhatsApp payslip delivery).
-- A hospitality point-of-sale platform.
-
-Step 1 — pick ONE topic from the real Reddit posts you're given below. Favor the AI-native
-subreddits and posts with real engagement (score/comments) over noise. Never repeat a topic or
-angle from the "already used" list you're given. If nothing in the batch intersects something
-Cameron has real authority to speak to, draft from Cameron's shipped work directly instead
-(source: "operator experience") — don't force a reach.
-
-Step 2 — draft, following all of these voice rules:
-- Punchy. Short lines, generous white space.
-- Contrarian-but-not-preachy. Opinionated, not hedged.
-- No emoji. 0-3 hashtags total.
-- End on a question that invites real replies, not engagement bait.
-- React to the source post from Cameron's actual operator experience — never summarize it like a
-  news digest.
-- Job-seeking framing is fine occasionally, not mandatory, never desperate.
-
-Respond in EXACTLY this format, nothing before or after:
-
-TOPIC: <one-line topic/angle, for dedup tracking>
-SOURCE: <the reddit URL you drew on, or "operator experience">
-POST:
-<the full post text, ready to publish as-is>`;
-
-function buildUserPrompt(payload: DraftPostPayload, sourceContext: string): string {
-  const usedLines = payload.existingTopics.length
-    ? payload.existingTopics.map((t) => `- ${t}`).join("\n")
-    : "(none yet)";
-
-  return `Already used topics/angles — do not repeat:\n${usedLines}\n\nReal Reddit posts from this week:\n${sourceContext}\n\nPick this week's topic and draft the post.`;
-}
-
-async function createClickUpTask(topic: string, source: string, post: string): Promise<string> {
+async function createClickUpTask(draft: DraftOutput): Promise<string> {
   const apiKey = process.env.CLICKUP_API_KEY;
   const listId = process.env.CLICKUP_LIST_ID;
   if (!apiKey) throw new Error("CLICKUP_API_KEY is not set");
@@ -187,8 +206,8 @@ async function createClickUpTask(topic: string, source: string, post: string): P
     method: "POST",
     headers: { Authorization: apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: `LinkedIn Draft — ${today} — ${topic}`,
-      description: `**Source:** ${source}\n\n---\n\n${post}`,
+      name: `LinkedIn Draft — ${today} — ${draft.topic}`,
+      description: buildClickUpDescription(draft),
       tags: ["linkedin-draft"],
     }),
   });
@@ -213,9 +232,9 @@ export const draftPost = task({
 
     let reply = "";
     for await (const message of query({
-      prompt: buildUserPrompt(payload, sourceContext),
+      prompt: buildUserPrompt(payload.existingTopics, sourceContext),
       options: {
-        systemPrompt: SYSTEM_PROMPT,
+        systemPrompt: buildSystemPrompt(),
         tools: [],
         maxTurns: 4,
         // Windows dev environments don't ship the SDK's bundled native CLI binary as an
@@ -232,20 +251,10 @@ export const draftPost = task({
     }
     if (!reply) throw new Error("Agent SDK returned no result");
 
-    const topicMatch = reply.match(/TOPIC:\s*(.+)/);
-    const sourceMatch = reply.match(/SOURCE:\s*(.+)/);
-    const postMatch = reply.match(/POST:\s*([\s\S]+)/);
-    if (!topicMatch || !sourceMatch || !postMatch) {
-      throw new Error(`Could not parse draft reply:\n${reply}`);
-    }
-
-    const topic = topicMatch[1].trim();
-    const source = sourceMatch[1].trim();
-    const post = postMatch[1].trim();
-
-    const clickupTaskUrl = await createClickUpTask(topic, source, post);
+    const draft = enforceDraftSafety(parseDraftOutput(reply));
+    const clickupTaskUrl = await createClickUpTask(draft);
     console.log(`Created ClickUp task: ${clickupTaskUrl}`);
 
-    return { topic, source, clickupTaskUrl };
+    return { ...draft, clickupTaskUrl };
   },
 });

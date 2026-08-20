@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "dev": "npx trigger.dev@4.5.4 dev",
     "deploy": "npx trigger.dev@4.5.4 deploy"
   },
@@ -16,6 +18,7 @@
     "typescript": "^5.6.3",
     "@types/node": "^22.9.0",
     "trigger.dev": "4.5.4",
-    "@trigger.dev/build": "4.5.4"
+    "@trigger.dev/build": "4.5.4",
+    "vitest": "^2.1.9"
   }
 }
