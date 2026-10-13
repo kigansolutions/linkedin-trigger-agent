@@ -7,10 +7,11 @@ engagement, send DMs, or bypass human approval.
 
 ## Current schedule
 
-Trigger.dev runs `find-topic` every Monday at 06:00 UTC:
+**Paused 2026-10-13.** The weekly cron was removed from `find-topic`, so it no longer runs on a
+schedule. Trigger it manually from the Trigger.dev dashboard, or restore the cron to resume:
 
 ```ts
-cron: "0 6 * * 1"
+cron: "0 6 * * 1", // Monday 06:00 UTC
 ```
 
 ## How it works

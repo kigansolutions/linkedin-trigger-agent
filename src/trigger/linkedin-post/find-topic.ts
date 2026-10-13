@@ -31,7 +31,7 @@ async function fetchExistingClickUpTitles(): Promise<string[]> {
 
 export const findTopic = schedules.task({
   id: "find-topic",
-  cron: "0 6 * * 1", // Monday 06:00 UTC
+  // Weekly cron paused 2026-10-13 (was "0 6 * * 1", Monday 06:00 UTC). Re-add it to resume.
   run: async (payload) => {
     const existingTopics = [...SEED_USED_TOPICS, ...(await fetchExistingClickUpTitles())];
 
