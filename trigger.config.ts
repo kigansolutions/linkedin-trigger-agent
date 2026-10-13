@@ -3,7 +3,7 @@ import { additionalPackages } from "@trigger.dev/build/extensions/core";
 
 export default defineConfig({
   project: "proj_zbdsyaosfxsvzboftqgy",
-  runtime: "node-24",
+  runtime: "node", // "node-24" needs trigger.dev CLI >= 4.5.7; this repo pins 4.5.4
   maxDuration: 300,
   dirs: ["./src/trigger"],
   build: {
